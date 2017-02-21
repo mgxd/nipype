@@ -333,3 +333,111 @@ class Dcm2niix(CommandLine):
         if name == 'output_dir':
             return os.getcwd()
         return None
+
+class Dcm2niibatchInputSpec(CommandLineInputSpec):
+    config_file = File(exists=True, argstr="-b %s", mandatory=True,
+                       desc="Load settings from config (must be yaml file)")
+
+
+class Dcm2niibatchOutputSpec(TraitedSpec):
+    converted_files = OutputMultiPath(File(exists=True))
+    bvecs = OutputMultiPath(File(exists=True))
+    bvals = OutputMultiPath(File(exists=True))
+    bids = OutputMultiPath(File(exists=True))
+
+
+class Dcm2niibatch(CommandLine):
+    """Uses Chris Rorden's dcm2niibatch to convert dicom files defined in a config.yml
+
+    Examples
+    ========
+
+    >>> from nipype.interfaces.dcm2nii import Dcm2niibatch
+    >>> converter = Dcm2niibatch()
+    >>> converter.inputs.config_file = config.yml
+    >>> converter.cmdline # doctest: +SKIP
+    'dcm2niibatch config.yml'
+
+    >>> flags = '-'.join([val.strip() + ' ' for val in sorted(' '.join(converter.cmdline.split()[1:-1]).split('-'))])
+    >>> flags # doctest: +ALLOW_UNICODE
+    ' -b y -f %t%p -m n -o . -s y -t n -v n -x n -z i '
+    """
+
+    input_spec = Dcm2niibatchInputSpec
+    output_spec = Dcm2niibatchOutputSpec
+    _cmd = 'dcm2niix'
+
+    def _format_arg(self, opt, spec, val):
+        if opt in ['bids_format', 'merge_imgs', 'single_file', 'verbose', 'crop',
+                   'has_private']:
+            spec = deepcopy(spec)
+            if val:
+                spec.argstr += ' y'
+            else:
+                spec.argstr += ' n'
+                val = True
+        if opt == 'source_names':
+            return spec.argstr % val[0]
+        return super(Dcm2niix, self)._format_arg(opt, spec, val)
+
+    def _run_interface(self, runtime):
+        new_runtime = super(Dcm2niix, self)._run_interface(runtime)
+        if self.inputs.bids_format:
+            (self.output_files, self.bvecs,
+             self.bvals, self.bids) = self._parse_stdout(new_runtime.stdout)
+        else:
+             (self.output_files, self.bvecs,
+             self.bvals) = self._parse_stdout(new_runtime.stdout)
+        return new_runtime
+
+    def _parse_stdout(self, stdout):
+        files = []
+        bvecs = []
+        bvals = []
+        bids = []
+        skip = False
+        find_b = False
+        for line in stdout.split("\n"):
+            if not skip:
+                out_file = None
+                if line.startswith("Convert "): # output
+                    fname = str(re.search('\S+/\S+', line).group(0))
+                    if isdefined(self.inputs.output_dir):
+                        output_dir = self.inputs.output_dir
+                    else:
+                        output_dir = self._gen_filename('output_dir')
+                    out_file = os.path.abspath(os.path.join(output_dir, fname))
+                    # extract bvals
+                    if find_b:
+                        bvecs.append(out_file + ".bvec")
+                        bvals.append(out_file + ".bval")
+                        find_b = False
+                # next scan will have bvals/bvecs
+                elif 'DTI gradients' in line or 'DTI gradient directions' in line:
+                    find_b = True
+                else:
+                    pass
+                if out_file:
+                    files.append(out_file + ".nii.gz")
+                    if self.inputs.bids_format:
+                        bids.append(out_file + ".json")
+                    continue
+            skip = False
+        # just return what was done
+        if not bids:
+            return files, bvecs, bvals
+        else:
+            return files, bvecs, bvals, bids
+
+    def _list_outputs(self):
+        outputs = self.output_spec().get()
+        outputs['converted_files'] = self.output_files
+        outputs['bvecs'] = self.bvecs
+        outputs['bvals'] = self.bvals
+        outputs['bids'] = self.bids
+        return outputs
+
+    def _gen_filename(self, name):
+        if name == 'output_dir':
+            return os.getcwd()
+        return None
