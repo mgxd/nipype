@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
+# vi: set ft=python sts=4 ts=4 sw=4 et:
 """The dcm2nii module provides basic functions for dicom conversion
 
    Change directory to provide relative paths for doctests
@@ -18,6 +20,12 @@ from .base import (CommandLine, CommandLineInputSpec,
                    InputMultiPath, traits, TraitedSpec,
                    OutputMultiPath, isdefined,
                    File, Directory)
+
+no_yaml = False
+try:
+    import yaml
+except ImportError:
+    no_yaml = True
 
 
 class Dcm2niiInputSpec(CommandLineInputSpec):
@@ -335,8 +343,8 @@ class Dcm2niix(CommandLine):
         return None
 
 class Dcm2niibatchInputSpec(CommandLineInputSpec):
-    config_file = File(exists=True, argstr="-b %s", mandatory=True,
-                       desc="Load settings from config (must be yaml file)")
+    config_file = File(exists=True, position=0, mandatory=True,
+                       desc="Load settings from config yaml file")
 
 
 class Dcm2niibatchOutputSpec(TraitedSpec):
@@ -354,76 +362,73 @@ class Dcm2niibatch(CommandLine):
 
     >>> from nipype.interfaces.dcm2nii import Dcm2niibatch
     >>> converter = Dcm2niibatch()
-    >>> converter.inputs.config_file = config.yml
+    >>> converter.inputs.config_file = 'config.yml'
     >>> converter.cmdline # doctest: +SKIP
     'dcm2niibatch config.yml'
-
-    >>> flags = '-'.join([val.strip() + ' ' for val in sorted(' '.join(converter.cmdline.split()[1:-1]).split('-'))])
-    >>> flags # doctest: +ALLOW_UNICODE
-    ' -b y -f %t%p -m n -o . -s y -t n -v n -x n -z i '
     """
 
     input_spec = Dcm2niibatchInputSpec
     output_spec = Dcm2niibatchOutputSpec
-    _cmd = 'dcm2niix'
+    _cmd = 'dcm2niibatch'
+
+    if no_yaml:
+        raise ImportError('PyYAML could not be imported')
 
     def _format_arg(self, opt, spec, val):
-        if opt in ['bids_format', 'merge_imgs', 'single_file', 'verbose', 'crop',
-                   'has_private']:
-            spec = deepcopy(spec)
-            if val:
-                spec.argstr += ' y'
-            else:
-                spec.argstr += ' n'
-                val = True
-        if opt == 'source_names':
+        if opt == 'config_file':
             return spec.argstr % val[0]
-        return super(Dcm2niix, self)._format_arg(opt, spec, val)
+        return super(Dcm2niibatch, self)._format_arg(opt, spec, val)
+
+    def _load_config(self):
+        with open(self.inputs.config_file, 'r') as fp:
+            data = yaml.load(fp)
+        return data
 
     def _run_interface(self, runtime):
-        new_runtime = super(Dcm2niix, self)._run_interface(runtime)
-        if self.inputs.bids_format:
+        new_runtime = super(Dcm2niibatch, self)._run_interface(runtime)
+        config = self._load_config()
+        try:
+            if config['Options']['isCreateBIDS']:
+                (self.output_files, self.bvecs,
+                 self.bvals, self.bids) = self._parse_stdout(new_runtime.stdout, 
+                                                             config, isBids=True)
+            else:
+                (self.output_files, self.bvecs,
+                 self.bvals) = self._parse_stdout(new_runtime.stdout,
+                                                 config)
+        except KeyError:
             (self.output_files, self.bvecs,
-             self.bvals, self.bids) = self._parse_stdout(new_runtime.stdout)
-        else:
-             (self.output_files, self.bvecs,
-             self.bvals) = self._parse_stdout(new_runtime.stdout)
-        return new_runtime
+             self.bvals) = self._parse_stdout(new_runtime.stdout,
+                                              config)
 
-    def _parse_stdout(self, stdout):
+    def _parse_stdout(self, stdout, config, isBids=False):
         files = []
         bvecs = []
         bvals = []
         bids = []
-        skip = False
         find_b = False
-        for line in stdout.split("\n"):
-            if not skip:
-                out_file = None
-                if line.startswith("Convert "): # output
-                    fname = str(re.search('\S+/\S+', line).group(0))
-                    if isdefined(self.inputs.output_dir):
-                        output_dir = self.inputs.output_dir
-                    else:
-                        output_dir = self._gen_filename('output_dir')
-                    out_file = os.path.abspath(os.path.join(output_dir, fname))
-                    # extract bvals
-                    if find_b:
-                        bvecs.append(out_file + ".bvec")
-                        bvals.append(out_file + ".bval")
-                        find_b = False
-                # next scan will have bvals/bvecs
-                elif 'DTI gradients' in line or 'DTI gradient directions' in line:
-                    find_b = True
-                else:
-                    pass
-                if out_file:
-                    files.append(out_file + ".nii.gz")
-                    if self.inputs.bids_format:
-                        bids.append(out_file + ".json")
-                    continue
-            skip = False
-        # just return what was done
+
+        for line in stdout.split("\n"):            
+            out_file = None
+            if line.startswith("Convert "): # output
+                fname = str(re.search('\S+/\S+', line).group(0))
+                out_file = os.path.abspath(fname)
+                # extract bvals
+                if find_b:
+                    bvecs.append(out_file + ".bvec")
+                    bvals.append(out_file + ".bval")
+                    find_b = False
+            # next scan will have bvals/bvecs
+            elif 'DTI gradients' in line or 'DTI gradient directions' in line:
+                find_b = True
+            else:
+                pass
+            if out_file:
+                files.append(out_file + ".nii.gz")
+                if isBids:
+                    bids.append(out_file + ".json")
+                continue
+          # just return what was done
         if not bids:
             return files, bvecs, bvals
         else:
@@ -437,7 +442,3 @@ class Dcm2niibatch(CommandLine):
         outputs['bids'] = self.bids
         return outputs
 
-    def _gen_filename(self, name):
-        if name == 'output_dir':
-            return os.getcwd()
-        return None
