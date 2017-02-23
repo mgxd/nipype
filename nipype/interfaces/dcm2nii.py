@@ -343,11 +343,11 @@ class Dcm2niix(CommandLine):
         return None
 
 class Dcm2niibatchInputSpec(CommandLineInputSpec):
-    config_file = File(exists=True, position=0, mandatory=True,
+    config_file = File(exists=True, position=0, mandatory=True, argstr='%s',
                        desc="Load settings from config yaml file")
 
 
-class Dcm2niibatchOutputSpec(TraitedSpec):
+class Dcm2niibatchOutputSpec(Dcm2niixOutputSpec):
     converted_files = OutputMultiPath(File(exists=True))
     bvecs = OutputMultiPath(File(exists=True))
     bvals = OutputMultiPath(File(exists=True))
@@ -372,11 +372,11 @@ class Dcm2niibatch(CommandLine):
     _cmd = 'dcm2niibatch'
 
     if no_yaml:
-        raise ImportError('PyYAML could not be imported')
+        raise ImportError('PyYAML required to run batch version of Dcm2niix')
 
     def _format_arg(self, opt, spec, val):
         if opt == 'config_file':
-            return spec.argstr % val[0]
+            return spec.argstr % val
         return super(Dcm2niibatch, self)._format_arg(opt, spec, val)
 
     def _load_config(self):
@@ -384,61 +384,71 @@ class Dcm2niibatch(CommandLine):
             data = yaml.load(fp)
         return data
 
+    def _option_parser(self, config, option):
+        """ look at yaml for options """
+        try:
+            return config['Options'][option]
+        except KeyError:
+            return False
+
     def _run_interface(self, runtime):
         new_runtime = super(Dcm2niibatch, self)._run_interface(runtime)
         config = self._load_config()
-        try:
-            if config['Options']['isCreateBIDS']:
-                (self.output_files, self.bvecs,
-                 self.bvals, self.bids) = self._parse_stdout(new_runtime.stdout, 
-                                                             config, isBids=True)
-            else:
-                (self.output_files, self.bvecs,
-                 self.bvals) = self._parse_stdout(new_runtime.stdout,
-                                                 config)
-        except KeyError:
+        if self._option_parser(config, 'isCreateBIDS'):
             (self.output_files, self.bvecs,
-             self.bvals) = self._parse_stdout(new_runtime.stdout,
+             self.bvals, self.bids) = self._parse_stdout(new_runtime.stdout, 
+                                                         config, isBids=True)
+        else:
+            (self.output_files, self.bvecs,
+             self.bvals) = self._parse_stdout(new_runtime.stdout, 
                                               config)
-
+        return new_runtime
+      
     def _parse_stdout(self, stdout, config, isBids=False):
         files = []
         bvecs = []
         bvals = []
         bids = []
         find_b = False
+        outtype = '.nii'
+        if self._option_parser(config, 'isGz'):
+            outtype = '.nii.gz'
 
         for line in stdout.split("\n"):            
             out_file = None
             if line.startswith("Convert "): # output
                 fname = str(re.search('\S+/\S+', line).group(0))
                 out_file = os.path.abspath(fname)
-                # extract bvals
+                # extract bval/bvec
                 if find_b:
-                    bvecs.append(out_file + ".bvec")
-                    bvals.append(out_file + ".bval")
+                    bval = out_file + ".bval"
+                    bvec = out_file + ".bvec"
+                    if os.path.exists(bval):
+                        bvals.append(bval)
+                    if os.path.exists(bvec):
+                        bvecs.append(bvec)
                     find_b = False
-            # next scan will have bvals/bvecs
+            # look for diffusion
             elif 'DTI gradients' in line or 'DTI gradient directions' in line:
                 find_b = True
-            else:
-                pass
             if out_file:
-                files.append(out_file + ".nii.gz")
-                if isBids:
-                    bids.append(out_file + ".json")
-                continue
-          # just return what was done
-        if not bids:
-            return files, bvecs, bvals
-        else:
+                out_file = out_file + outtype
+                if os.path.exists(out_file):
+                    files.append(out_file + outtype)
+                    if isBids:
+                        bids.append(out_file + ".json")
+        print(files, bvecs, bvals)
+        if bids:
             return files, bvecs, bvals, bids
+        else:
+            return files, bvecs, bvals
 
     def _list_outputs(self):
         outputs = self.output_spec().get()
         outputs['converted_files'] = self.output_files
         outputs['bvecs'] = self.bvecs
         outputs['bvals'] = self.bvals
-        outputs['bids'] = self.bids
+        if self._option_parser(config, 'isCreateBIDS'): 
+            outputs['bids'] = self.bids
         return outputs
 
