@@ -249,8 +249,12 @@ class EstimateModel(SPMCommand):
         outputs['mask_image'] = mask
         spm = sio.loadmat(self.inputs.spm_mat_file, struct_as_record=False)
         betas = []
-        for vbeta in spm['SPM'][0, 0].Vbeta[0]:
-            betas.append(str(os.path.join(pth, vbeta.fname[0])))
+        try: # Classical
+            for vbeta in spm['SPM'][0, 0].Vbeta[0]:
+                betas.append(str(os.path.join(pth, vbeta.fname[0])))
+        except AttributeError: # Bayesian
+             for vcbeta in spm['SPM'][0, 0].VCbeta[0]:
+                betas.append(str(os.path.join(pth, vcbeta.fname[0])))
         if betas:
             outputs['beta_images'] = betas
         if spm12:
