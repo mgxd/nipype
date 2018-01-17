@@ -281,8 +281,8 @@ class DistributedPluginBase(PluginBase):
 
             if len(jobids) > 0:
                 # send all available jobs
-                logger.info('Pending[%d] Submitting[%d] jobs Slots[%d]',
-                            num_jobs, len(jobids[:slots]), slots or 'inf')
+                logger.info('Pending[%d] Submitting[%d] jobs Slots[{}]'.format(
+                    num_jobs, len(jobids[:slots]), slots or 'inf'))
 
                 for jobid in jobids[:slots]:
                     if isinstance(self.procs[jobid], MapNode):

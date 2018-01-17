@@ -1,11 +1,7 @@
-'''
-Created on Aug 2, 2013
-
-@author: chadcumba
-
-Parallel workflow execution with SLURM
-'''
-from __future__ import print_function, division, unicode_literals, absolute_import
+# -*- coding: utf-8 -*-
+"""Parallel workflow execution with SLURM"""
+from __future__ import (print_function, division,
+                        unicode_literals, absolute_import)
 from builtins import open
 
 import os
@@ -18,25 +14,74 @@ from .base import SGELikeBatchManagerBase, logger
 
 iflogger = logging.getLogger('interface')
 
+# class SLURMJobInfo(object):
+#     """
+#     Information about a single job created through SLURM;
+#     Each job is responsible for knowing its own refresh state.
+#     Adapted from Nipype's SGE plugin
+#     """
+#
+#     def __init__(self, job_num, job_queue_state, job_time, job_queue_name,
+#                  job_slots, sbatch_command_line):
+#         """
+#         job_num : the primary unique identifier for this job; int
+#         job_queue_state : the status of the job; string
+#         job_time : the job start time
+#         job_info_creation_time : when the job was created
+#         job_queue_name : where the job is running
+#         job_slots : how many slots are being used
+#         """
+#         self._job_num = int(job_num)
+#         self._job_queue_state = str(job_queue)
+#         self._job_time = job_time
+#         self._job_info_creation_time = time.time()
+#         self._job_queue_name = job_queue_name
+#         self._job_slots = int(job_slots)
+#         self._sbatch_command_line = sbatch_command_line
+#
+#     def __repr__(self):
+#         return '{:<8d}{:12}{:<3d}{:20}{:8}{}'.format(
+#             self._job_num, self._job_queue_state, self._job_slots,
+#             time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(self._job_time)),
+#             self._job_queue_name, self._qsub_command_line)
+#
+#     def is_initializing(self):
+#         return self._job_queue_state == "initializing"
+#
+#     def is_zombie(self):
+#         return self._job_queue_state == "zombie" or self._job_queue_state == "finished"
+#
+#     def is_job_state_pending(self):
+#         """Return True, unless job is in the "zombie" or finished"""
+#         is_pending_state = not self.is_zombie()
+#
+#     def update_info(self, job_queue_state, job_time, job_queue_name, job_slots):
+#         self._job_queue_state = job_queue_state
+#         self._job_time = job_time
+#         self._job_queue_name = job_queue_name
+#         self._job_slots = int(job_slots)
+#
+#     def set_state(self, new_state):
+#         self._job_queue_state = new_state
+#
+#
+# class SqueueSubstitute(object):
+#     """
+#     """
 
 class SLURMPlugin(SGELikeBatchManagerBase):
-    '''
+    """
     Execute using SLURM
 
     The plugin_args input to run can be used to control the SLURM execution.
     Currently supported options are:
 
     - template : template to use for batch job submission
-
     - sbatch_args: arguments to pass prepend to the sbatch call
 
-
-    '''
-
+    """
     def __init__(self, **kwargs):
-
         template = "#!/bin/bash"
-
         self._retry_timeout = 2
         self._max_tries = 2
         self._template = template
@@ -83,11 +128,12 @@ class SLURMPlugin(SGELikeBatchManagerBase):
         if self._sbatch_args:
             sbatch_args = self._sbatch_args
         if 'sbatch_args' in node.plugin_args:
-            if 'overwrite' in node.plugin_args and\
-               node.plugin_args['overwrite']:
+            if node.plugin_args.get('overwrite'):
                 sbatch_args = node.plugin_args['sbatch_args']
             else:
                 sbatch_args += (" " + node.plugin_args['sbatch_args'])
+
+        # the following can cause issues with other arguments
         if '-o' not in sbatch_args:
             sbatch_args = '%s -o %s' % (sbatch_args, os.path.join(path, 'slurm-%j.out'))
         if '-e' not in sbatch_args:
@@ -132,3 +178,8 @@ class SLURMPlugin(SGELikeBatchManagerBase):
         logger.debug('submitted sbatch task: %d for node %s' % (taskid, node._id))
         return taskid
 
+    def _get_result():
+        """
+        Will have to override SGELikeBatchManagerBase implementation to decrease
+        polling tax
+        """
