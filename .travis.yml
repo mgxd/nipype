@@ -27,16 +27,16 @@ cache:
 
 before_install:
 - if $INSTALL_DEB_DEPENDECIES; then sudo rm -rf /dev/shm; sudo ln -s /run/shm /dev/shm; fi
-- travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh)
+- travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
 - if $INSTALL_DEB_DEPENDECIES; then
     travis_retry sudo apt-get -y update &&
     travis_retry sudo apt-get install -y -qq fsl afni elastix fsl-atlases;
-  fi
+  fi;
 - if $INSTALL_DEB_DEPENDECIES; then
     source /etc/fsl/fsl.sh;
     source /etc/afni/afni.sh;
     export FSLOUTPUTTYPE=NIFTI_GZ;
-  fi
+  fi;
 
 # handle python operations separately to reduce timeouts
 - wget https://repo.continuum.io/miniconda/Miniconda${TRAVIS_PYTHON_VERSION:0:1}-latest-Linux-x86_64.sh
