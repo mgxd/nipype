@@ -29,7 +29,7 @@ before_install:
 - if $INSTALL_DEB_DEPENDECIES; then sudo rm -rf /dev/shm; sudo ln -s /run/shm /dev/shm; fi
 - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh)
 - if $INSTALL_DEB_DEPENDECIES; then
-    travis_retry sudo apt-get -y update;
+    travis_retry sudo apt-get -y update &&
     travis_retry sudo apt-get install -y -qq fsl afni elastix fsl-atlases
   fi
 - if $INSTALL_DEB_DEPENDECIES; then
