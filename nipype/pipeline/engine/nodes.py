@@ -383,7 +383,7 @@ class Node(EngineBase):
 
         return cached, self._hashvalue, hashfile, self._hashed_inputs
 
-    def run(self, updatehash=False):
+    def run(self, updatehash=False, **kwargs):
         """Execute the node in its directory.
 
         Parameters
@@ -468,7 +468,7 @@ class Node(EngineBase):
         savepkl(op.join(outdir, '_inputs.pklz'), self.inputs.get_traitsfree())
 
         try:
-            result = self._run_interface(execute=True)
+            result = self._run_interface(execute=True, **kwargs)
         except Exception:
             logger.warning('[Node] Error on "%s" (%s)', self.fullname, outdir)
             # Tear-up after error
@@ -548,11 +548,11 @@ class Node(EngineBase):
             os.remove(outdatedhash)
         _save_hashfile(self._hashvalue, self._hashed_inputs)
 
-    def _run_interface(self, execute=True, updatehash=False):
+    def _run_interface(self, execute=True, updatehash=False, **kwargs):
         if updatehash:
             self._update_hash()
             return self._load_results()
-        return self._run_command(execute)
+        return self._run_command(execute, **kwargs)
 
     def _load_results(self):
         cwd = self.output_dir()
@@ -583,7 +583,7 @@ class Node(EngineBase):
                 result = self._run_interface()
         return result
 
-    def _run_command(self, execute, copyfiles=True):
+    def _run_command(self, execute, copyfiles=True, **kwargs):
         if not execute:
             try:
                 result = self._load_results()
@@ -600,8 +600,24 @@ class Node(EngineBase):
 
         outdir = self.output_dir()
         # Run command: either execute is true or load_results failed.
+
+        if copyfiles:
+            self._originputs = deepcopy(self._interface.inputs)
+            self._copyfiles_to_wd(execute=execute)
+
+        if 'executor' in kwargs and 'image' in kwargs:
+            # divert from local execution
+            result = self._remote_exec(kwargs['executor'],
+                                       kwargs['image'],
+                                       **kwargs)
+            if result is not None:
+                return result
+
+
+
+        # remove interface class from result..
         result = InterfaceResult(
-            interface=self._interface.__class__,
+            interface=self._interface.__class__.__name__,
             runtime=Bunch(
                 cwd=outdir,
                 returncode=1,
@@ -609,10 +625,6 @@ class Node(EngineBase):
                 hostname=socket.gethostname()
             ),
             inputs=self._interface.inputs.get_traitsfree())
-
-        if copyfiles:
-            self._originputs = deepcopy(self._interface.inputs)
-            self._copyfiles_to_wd(execute=execute)
 
         message = '[Node] Running "{}" ("{}.{}")'.format(
             self.name, self._interface.__module__,
@@ -653,6 +665,21 @@ class Node(EngineBase):
         _save_resultfile(result, outdir, self.name)
 
         return result
+
+    def _remote_exec(self, executor, image, **kwargs):
+        """Handles remote execution of `node.run()"""
+        if executor == 'docker':
+            try:
+                import docker
+                from ..plugins.containers import fetch_docker_img
+            except ImportError:
+                logger.warning("Unable to import docker SDK, running locally")
+                return
+
+            client = docker.from_env(**kwargs)
+            img = fetch_docker_img(client, kwargs['image'])
+            # make + allow executable docker run script
+
 
     def _copyfiles_to_wd(self, execute=True, linksonly=False):
         """copy files over and change the inputs"""
