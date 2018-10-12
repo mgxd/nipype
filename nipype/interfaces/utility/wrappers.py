@@ -29,7 +29,7 @@ class FunctionInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
     function_str = traits.Str(mandatory=True, desc='code for function')
 
 
-class Function(IOBase):
+class Function(BaseInterface):
     """Runs arbitrary function as an interface
 
     Examples
