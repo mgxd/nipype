@@ -92,9 +92,9 @@ class TrackDensityMap(DipyBaseInterface):
     def _run_interface(self, runtime):
         from numpy import min_scalar_type
         from dipy.tracking.utils import density_map
-        import nibabel.trackvis as nbt
+        import nibabel.streamlines as nbsl
 
-        tracks, header = nbt.read(self.inputs.in_file)
+        tracks, header = nbsl.load(self.inputs.in_file)
         streams = ((ii[0]) for ii in tracks)
 
         if isdefined(self.inputs.reference):

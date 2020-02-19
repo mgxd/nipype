@@ -3,9 +3,9 @@
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 import os.path as op
 import nibabel as nb
-import nibabel.trackvis as trk
+import nibabel.streamlines as trk
 import numpy as np
-from nibabel.trackvis import HeaderError
+from nibabel.streamlines import HeaderError
 from nibabel.volumeutils import native_code
 from nibabel.orientations import aff2axcodes
 

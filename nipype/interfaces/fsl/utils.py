@@ -2576,9 +2576,9 @@ class WarpPoints(CommandLine):
         writer.write()
 
     def _trk_to_coords(self, in_file, out_file=None):
-        from nibabel.trackvis import TrackvisFile
+        from nibabel.streamlines import TrkFile
 
-        trkfile = TrackvisFile.from_file(in_file)
+        trkfile = TrkFile.from_file(in_file)
         streamlines = trkfile.streamlines
 
         if out_file is None:

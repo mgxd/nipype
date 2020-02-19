@@ -6,7 +6,7 @@
 import os
 import sys
 import re
-from collections import Iterator
+from collections.abc import Iterator
 from warnings import warn
 
 from distutils.version import LooseVersion
